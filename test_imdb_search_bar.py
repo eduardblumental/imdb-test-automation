@@ -1,27 +1,38 @@
-import pytest, time
+import pytest, time, os
 
 from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common import TimeoutException
 
-from login_data import username, password
 
 driver = Chrome(service=Service(ChromeDriverManager().install()))
 
 
+@pytest.fixture(scope='session')
+def counter():
+    return {'watchlist': 0}
+
+
 @pytest.fixture(scope='session', autouse=True)
-def login_to_imdb():
+def login_to_imdb(counter):
     driver.get('https://www.imdb.com/')
     driver.find_element(By.XPATH, "//div[text()='Sign In']").click()
     driver.find_element(By.XPATH, "//span[text()='Sign in with IMDb']").click()
 
-    driver.find_element(By.ID, "ap_email").send_keys(username)
-    driver.find_element(By.ID, "ap_password").send_keys(password)
+    driver.find_element(By.ID, "ap_email").send_keys(os.environ.get('USER'))
+    driver.find_element(By.ID, "ap_password").send_keys(os.environ.get('PASSWORD'))
     driver.find_element(By.ID, "signInSubmit").click()
 
-    time.sleep(3)
+    try:
+        watchlist_counter = WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.XPATH, "//div[text()='Watchlist']/span")))
+        counter['watchlist'] = int(watchlist_counter.get_attribute('innerHTML'))
+    except TimeoutException:
+        print('\nThe Watchlist is empty. Keeping counter at 0.')
 
     yield driver
 
@@ -29,9 +40,9 @@ def login_to_imdb():
     driver.quit()
 
 
-def test_imdb_search_bar():
+def test_imdb_search_bar(counter):
     search_bar = driver.find_element(By.ID, "suggestion-search")
-    search_bar.send_keys("deadpool")
+    search_bar.send_keys("Deadpool")
     search_bar.send_keys(Keys.RETURN)
 
-    time.sleep(3)
+    assert counter['watchlist'] == 0
